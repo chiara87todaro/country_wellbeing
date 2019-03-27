@@ -1,0 +1,256 @@
+---
+title: "The recipe of well-being"
+# author: "Chiara Todaro"
+date: "27 March 2019"
+output: html_document
+runtime: shiny
+---
+<style type="text/css">
+
+h1.title {
+  font-size: 30px;
+  text-align: center;
+}
+
+h4.date { /* Header 4 - and the author and data headers use this too  */
+  font-size: 22px;
+  font-family: "serif", Times, ;
+  color: DarkGrey;
+  text-align: right;
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,cache = TRUE)
+```
+
+```{r libraries}
+library(shiny);library(leaflet);library(dplyr)
+library(UsingR);library(RColorBrewer); library(ggplot2)
+
+# path_app<-"./home/chiara/coursera/course9_Developing_Data_Products/assignment_interactive_map"
+# shinyAppDir(
+#   system.file(path_app, package="shiny"),
+#   options = list(width = "100%", height = 700)
+# )
+
+```
+
+In past years the 'well-being' of a country was only related to indicators of economic
+growth such as Gross Domestic Product (GDP). More recently the opinion of the population
+on social and personal aspects have been taken into account in order to have a deeper understanding of a country.
+
+This development has been accomplished by [National Accounts of Well-being]("http://www.nationalaccountsofwellbeing.org"), by using surveys that capture
+how people feel and experience their lives in their social environment.
+
+This evolving research aims to bring about change in how societies shape the lives
+of their citizens by making more self-aware decisions in the policy-making process.
+
+### How 'well-being' can be quantified?
+
+The indicator of well-being is not a well-defined quantity and for the
+purpose of this representation it suffices to know that it takes in to account
+both social and economic factors (see list below) and it is quantified in a
+scale from 0 to 10.
+
+List of factors used in well-being calculation:
+
+      
+* **GDP** :GDP per person (US$)
+* **Equality** : % (GINI index) 
+* **Food.consumption** : kCal per day per person
+* **Alcohol.consumption** : litres per year per person
+* **Energy.consumption** : kWh per year per person in residential electricity use
+* **Family** : children per women
+* **Working.hours** : per week per person (average)
+* **Working.income** : hourly pay per person (US$)
+* **Health.spending** : % of government spend
+* **Military.spending**: % of GDP
+
+
+```{r lefletmap_prep}
+data("wellbeing")
+wellbeing<- wellbeing %>% dplyr::select(Country,GDP,Equality,Food.consumption,Alcohol.consumption,
+                                 Energy.consumption,Family,Working.hours,Work.income,
+                                 Health.spending,Military.spending,Well.being)
+
+countries<-wellbeing$Country;
+capitalCoorLat<-c(48.207877, 50.849091, 42.690709, 35.188011, 55.675588, 59.439682, 60.188412,
+                     48.856102, 52.517935, 47.493187, 53.349599, 52.367045, 59.913713, 52.227353,
+                     38.722676, 48.147531, 46.059295, 40.418467, 59.326231, 46.948724, 50.461799,
+                     51.504076);
+capitalCoorLng<-c(16.378618, 4.356842, 23.331489, 33.382635, 12.567399, 24.744836, 24.945003,
+                     2.353236, 13.401441, 19.026618, -6.259365, 4.913775, 10.752905, 21.000722,
+                     -9.131732, 17.110453, 14.514914, -3.697429, 18.061721, 7.447394, 30.517915,
+                     -0.114110);
+
+capitals<-data.frame(lat=capitalCoorLat,lng=capitalCoorLng,wellbeingInd=wellbeing$Well.being)
+pal_adhoc<-colorRampPalette(c("red","orange","green"))#brewer.pal(7,"Purples")
+paletteWB<-colorNumeric(palette = pal_adhoc(7),domain = capitals$wellbeingInd);
+
+```
+
+<!-- Select a country to see which factors influence  the well-being measure. -->
+```{r input_table_country,cache=FALSE}
+# inputPanel(selectInput("country","Country:",
+#                        c("Austria"=1,"Belgium"=2,"Bulgaria"=3,"Cyprus"=4,"Denmark"=5,
+#                          "Estonia"=6,"Finland"=7,"France"=8,"Germany"=9,"Hungary"=10,
+#                          "Ireland"=11,"Netherlands"=12,"Norway"=13,"Poland"=14,"Portugal"=15,
+#                          "Slovakia"=16,"Slovenia"=17,"Spain"=18,"Sweden"=19,"Switzerland"=20,
+#                          "Ukraine"=21,"United Kingdom"=22)
+#                        )
+#            )
+```
+               
+               
+```{r table_country,cache=FALSE}
+# renderTable(t(wellbeing[input$country,]),rownames = TRUE,
+#                                          bordered =TRUE, colnames = FALSE,
+#          caption=" Data are taken from R package UsingR and more info can be found
+#          <a href='http://prcweb.co.uk/lab/what-makes-us-happy/'> here</a> ")
+```
+
+The map below shows a measure of 'well-being' for 22 European countries.
+
+**Click on the markers below to find out how much the well-being of each country is.**
+
+```{r leaflet_map,cache=FALSE}
+shinyApp(
+   ui=fluidPage(
+      column(8,
+             tags$br(),
+             leafletOutput("plot_map",width= "100%"), #,height = "100%"
+             tags$br()
+      ),
+      column(4,
+             helpText("Click on a circle to get info about the selected country"),
+             tableOutput("table_country")
+      )
+   ),
+   server = function(input, output,session){
+      output$plot_map <- renderLeaflet({ #renderLeaflet
+     plot_map<-capitals %>% leaflet() %>% addTiles() %>% 
+        addCircleMarkers(lat=~lat, lng=~lng,weight=3,radius=capitals$wellbeingInd*1,
+                         color= ~paletteWB(wellbeingInd), layerId=seq(nrow(capitals)),
+                         popup=paste0("Well-being =",capitals$wellbeingInd)) %>% 
+        addLegend("topright", pal = paletteWB, values= ~ wellbeingInd, title = "Well-being");
+     plot_map
+  })
+  
+  observeEvent(input$plot_map_marker_click, {
+     click_id <- input$plot_map_marker_click$id
+     output$table_country <- renderTable(t(wellbeing[click_id,]),rownames = TRUE,
+                                         bordered =TRUE, colnames = FALSE,
+         caption=" Data are taken from R package UsingR and more info can be found
+         <a href='http://prcweb.co.uk/lab/what-makes-us-happy/'> here</a> ")
+  })
+   }
+)
+```
+
+
+### How much each factor impacts on well-being?
+
+A simple linear prediction model shows how much a unit change in each 
+factor modifies, on average, the well-being measure.
+
+In practice, coefficients can be seen as weights that balance 
+the well-being measure. Positive coefficients increase the well-being, 
+while negative ones drop it down. The graphical size of each coefficient 
+represents the range of possible values it could take. The larger the 
+circle, the larger the range. Note that this degree of uncertainty is 
+intrinsical of the linear prediction model.
+
+```{r lm_coeff}
+fit<-lm(data=wellbeing,Well.being ~ .-Country)  
+   CI<-confint(fit, rownames(summary(fit)$coefficients), level=0.95);
+   CI<-CI[2:nrow(summary(fit)$coefficients),]
+   Mcoef<-summary(fit)$coefficients[2:nrow(summary(fit)$coefficients),];
+   dfCoef<-data.frame(coeff=Mcoef[,1],covar=rownames(Mcoef),ci2.5=CI[,1],ci97.5=CI[,2]);
+   dfCoef<-dfCoef  %>% arrange(desc(coeff)) %>% mutate(cil=abs(ci97.5-ci2.5))
+   
+```
+
+
+```{r plot_coeff,cache=FALSE}
+renderPlot({
+     pCoef<-ggplot(data=dfCoef,aes(y=covar,x=coeff))+ coord_flip()+ guides(size=FALSE)+
+        geom_point(aes(size=cil,fill=covar),shape=21)+geom_vline(xintercept =0,colour="red")+ 
+        theme(plot.title = element_text(hjust = 0.5,size=15),axis.text.x =element_blank())+ #,legend.position = "none"
+        theme(axis.text.y=element_text(size=15),legend.key.size = unit(1, "cm"),
+              legend.text = element_text(size = 15),legend.title = element_blank())+
+        theme(axis.title=element_text(size=15))+
+        labs(title = "Average Marginal Effects with confidence intervals")+
+           ylab("per unit change in [see legend]")+xlab("linear coefficient")
+     pCoef
+})
+```
+
+
+
+### Can you find the perfect recipe for well-being?
+
+The linear model coefficients allow us to predict the 
+well-being by using new values of the factors listed above.
+Note that this prediction model is for representative purposes 
+only and it could take values outside the defined range 0-10.
+                   
+Move the sliders and find out the estimated well-being!
+ 
+```{r table_prediction,cache=FALSE}
+shinyApp(
+   ui=fluidPage(
+      column(4,
+             sliderInput("sl_gdp","GDP",min = 1000, max = 100000, value = 30000,step=500),
+             sliderInput("sl_equality","Equality",min = 0, max = 100, value = 60,step=5),
+             sliderInput("sl_food","Food consumption",min=500,max=5000, value = 2000,step=20),
+             sliderInput("sl_alcohol","Alcohol consumption",min=5,max=30,value = 20,step=1),
+             sliderInput("sl_energy","Energy consumption",min=300,max=10000,value =3000,step=150)
+      ),
+      column(4,
+             sliderInput("sl_family","Family",min = 1, max = 10, value = 4,step=1),
+             sliderInput("sl_whours","Working hours",min = 1, max = 80, value = 40,step=1),
+             sliderInput("sl_wincome","Work income",min = 1, max = 100, value = 30,step=5),
+             sliderInput("sl_health","Health spending",min = 0, max = 100, value = 20,step=10),
+             sliderInput("sl_military","Military spending",min = 0, max = 100, value = 5,step=10)
+      ),
+      column(4,
+             tags$h5("The predicted well-being is* ...",align="center"),
+             tags$head(tags$style(HTML("tbody>
+                 tr:last-child {font-weight:bold;}"))
+             ),
+             tableOutput("prediction")
+      )
+   ),
+   server = function(input,output,session){
+      predictionTable<-reactive({
+         newDF<-data.frame(Country="Austria",GDP=input$sl_gdp,Equality=input$sl_equality,
+                           Food.consumption=input$sl_food,Alcohol.consumption=input$sl_alcohol,
+                           Energy.consumption=input$sl_energy,Family=input$sl_family,
+                           Working.hours=input$sl_whours,Work.income=input$sl_wincome,
+                           Health.spending=input$sl_health,Military.spending=input$sl_military);
+         mypred<-mutate(newDF,Well.being=predict(fit,newdata = newDF));
+      })
+      
+      output$prediction<-renderTable(t(predictionTable()),rownames = TRUE,bordered =TRUE,
+                                     colnames = FALSE,
+                  caption="*Note that the name of the country is not relevant for calculations.")
+   }
+)
+
+```
+
+```{r footnote}
+inputPanel(
+   tags$img(src = "https://cran.r-project.org/Rlogo.svg", width = "100px", height = "100px"),
+   tags$div(
+   "Built in ",
+   tags$a(href="https://www.rstudio.com/","RStudio"),
+   "by C. Todaro with ",
+   tags$a(href="https://cran.r-project.org/","R"),
+   "packages shiny, leaflet, UsingR, dplyr, RColorBrewer, knitr, and ggplot2"
+   ),
+   tags$img(src = "https://www.rstudio.com/wp-content/uploads/2019/03/RStudio-Logo-Blue-Gray-125.png", width = "100px", height = "100px")
+)
+```
+
+
